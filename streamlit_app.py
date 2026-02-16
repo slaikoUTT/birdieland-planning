@@ -4,7 +4,7 @@ import streamlit as st
 import datetime
 from dataclasses import dataclass
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -69,45 +69,34 @@ HORAIRES = {
 }
 
 # ── Rotation 3 semaines (jours off par CDI) ───────────────────────────────
-# 0=Lun, 4=Ven, 5=Sam, 6=Dim
+# 0=Lun, 1=Mar, 2=Mer, 3=Jeu, 4=Ven, 5=Sam, 6=Dim
 
 ROTATION = {
-    1: {"Baptiste Le Moing": {6, 0}, "Joseph Watrinet": {4, 5}, "Alexandre Corchia": {4, 5}},
-    2: {"Baptiste Le Moing": {6, 0}, "Joseph Watrinet": {4, 5}, "Alexandre Corchia": {4, 5}},
-    3: {"Baptiste Le Moing": {4, 5}, "Joseph Watrinet": {4, 5}, "Alexandre Corchia": {6, 0}},
+    1: {"Baptiste Le Moing": {5, 6}, "Joseph Watrinet": {1, 2}, "Alexandre Corchia": {3, 4}},
+    2: {"Baptiste Le Moing": {3, 4}, "Joseph Watrinet": {5, 6}, "Alexandre Corchia": {1, 2}},
+    3: {"Baptiste Le Moing": {0, 1}, "Joseph Watrinet": {3, 4}, "Alexandre Corchia": {5, 6}},
 }
+
+# Variante W3 : semaine avec réunion direction → Baptiste off Mar+Mer au lieu de Lun+Mar
+ROTATION_MEETING_W3 = {"Baptiste Le Moing": {1, 2}, "Joseph Watrinet": {3, 4}, "Alexandre Corchia": {5, 6}}
+
+# ── Réunion direction (1 lundi sur 2) ────────────────────────────────────
+REUNION_REF_DATE = datetime.date(2026, 3, 2)  # Prochain lundi avec réunion
+
+
+def is_meeting_week(monday_date):
+    """True si ce lundi est une semaine avec réunion direction."""
+    delta_days = (monday_date - REUNION_REF_DATE).days
+    delta_weeks = delta_days // 7
+    return delta_weeks % 2 == 0
+
 
 # ── Alternance dimanche (1 CDI par semaine du cycle) ────────────────────
-# Semaine 1 : Baptiste off (Dim+Lun) → Joseph travaille le dimanche
-# Semaine 2 : Joseph off (Dim+Lun)   → Alexandre travaille le dimanche
-# Semaine 3 : Alexandre off (Dim+Lun) → Baptiste travaille le dimanche
 SUNDAY_ROTATION = {
-    1: "Joseph Watrinet",
-    2: "Alexandre Corchia",
-    3: "Baptiste Le Moing",
+    1: "Joseph Watrinet",      # Bap off Sam+Dim → Jos travaille Dim
+    2: "Baptiste Le Moing",    # Jos off Sam+Dim → Bap travaille Dim
+    3: "Baptiste Le Moing",    # Alex off Sam+Dim → Bap travaille Dim
 }
-
-# Priorité repos consécutifs : Baptiste est le moins prioritaire
-# (si un CDI doit perdre ses 2 jours consécutifs, c'est Baptiste en premier)
-CONSECUTIVE_REST_PRIORITY = ["Joseph Watrinet", "Alexandre Corchia", "Baptiste Le Moing"]
-
-# ── Paires d'alternance matin/soir ──────────────────────────────────────
-# Jours pairs (Lun=0, Mer=2, Ven=4) : 1er → matin, 2ème → soir
-# Jours impairs (Mar=1, Jeu=3, Sam=5) : 1er → soir, 2ème → matin
-ALTERNATION_PAIRS = [
-    ("Baptiste Le Moing", "Joseph Watrinet"),
-    ("Hippolyte Amy", "Alexandre Corchia"),
-]
-
-
-def get_day_preference(emp_name, day):
-    """Retourne 'matin' ou 'soir' selon l'alternance du jour."""
-    for a, b in ALTERNATION_PAIRS:
-        if emp_name == a:
-            return 'matin' if day % 2 == 0 else 'soir'
-        if emp_name == b:
-            return 'soir' if day % 2 == 0 else 'matin'
-    return None
 
 
 def time_str(h, m):
@@ -137,10 +126,113 @@ def make_shift(shift_type, start_h, start_m, end_h, end_m):
     }
 
 
-def generate_week(week_num, extras=None):
+def get_off_days(week_num, meeting_week=False):
+    """Retourne les jours off pour une semaine donnée, avec gestion réunion."""
+    if week_num == 3 and meeting_week:
+        return ROTATION_MEETING_W3
+    return ROTATION[week_num]
+
+
+def assign_shifts(available, day, schedule, week_num):
+    """Assigne matin/soir pour un jour Mon-Sam.
+
+    Règles :
+    - Alexandre → toujours soir
+    - Baptiste → toujours matin
+    - Joseph → flexible (matin par défaut, soir si nécessaire)
+    - Part-timers → soir par défaut, matin si un CDI a transition soir→matin
+    - Anti-transition : si quelqu'un a fait soir la veille, il ne peut pas faire matin
+    - Minimum : 1 matin + 2 soir
+    """
+    morning_staff = []
+    evening_staff = []
+
+    for emp in available:
+        # Vérifier si transition soir→matin interdite
+        can_do_morning = True
+        if day > 0:
+            yesterday = schedule[emp.name][day - 1]
+            if yesterday and yesterday.get('hours', 0) > 0 and yesterday['type'] == 'soir':
+                # Vérifier repos : fin soir veille → début matin lendemain
+                end_parts = yesterday['end'].split(':')
+                if end_parts[0]:
+                    end_min = int(end_parts[0]) * 60 + int(end_parts[1])
+                    sh, sm = HORAIRES[day][:2]
+                    start_min = to_minutes(sh, sm)
+                    rest = 24 * 60 - end_min + start_min
+                    if rest < 11 * 60:
+                        can_do_morning = False
+
+        # Assignation selon les règles
+        if emp.name == "Alexandre Corchia":
+            evening_staff.append(emp)
+        elif emp.name == "Baptiste Le Moing":
+            morning_staff.append(emp)
+        elif emp.name == "Joseph Watrinet":
+            if can_do_morning:
+                # Joseph matin par défaut, sera déplacé soir si nécessaire
+                morning_staff.append(emp)
+            else:
+                evening_staff.append(emp)
+        elif emp.name in CDI_NAMES:
+            # Autres CDIs (extras CDI éventuels)
+            if can_do_morning:
+                morning_staff.append(emp)
+            else:
+                evening_staff.append(emp)
+        else:
+            # Part-timers : soir par défaut, matin si nécessaire
+            if can_do_morning:
+                evening_staff.append(emp)  # soir par défaut
+            else:
+                evening_staff.append(emp)
+
+    # Garantir au moins 2 soir pour la fermeture
+    # Déplacer Joseph vers soir si nécessaire
+    while len(evening_staff) < 2 and morning_staff:
+        # Préférer déplacer Joseph (flexible), puis part-timers
+        joseph = [e for e in morning_staff if e.name == "Joseph Watrinet"]
+        non_baptiste = [e for e in morning_staff if e.name != "Baptiste Le Moing"]
+        if joseph:
+            evening_staff.append(joseph[0])
+            morning_staff.remove(joseph[0])
+        elif non_baptiste:
+            evening_staff.append(non_baptiste[0])
+            morning_staff.remove(non_baptiste[0])
+        else:
+            break
+
+    # Si aucun matin et au moins 1 soir peut basculer
+    if not morning_staff and len(evening_staff) > 2:
+        # Chercher un part-timer qui peut faire matin
+        for emp in list(evening_staff):
+            if emp.name not in CDI_NAMES:
+                # Vérifier la transition
+                can_morning = True
+                if day > 0:
+                    yesterday = schedule[emp.name][day - 1]
+                    if yesterday and yesterday.get('hours', 0) > 0 and yesterday['type'] == 'soir':
+                        end_parts = yesterday['end'].split(':')
+                        if end_parts[0]:
+                            end_min = int(end_parts[0]) * 60 + int(end_parts[1])
+                            sh, sm = HORAIRES[day][:2]
+                            start_min = to_minutes(sh, sm)
+                            rest = 24 * 60 - end_min + start_min
+                            if rest < 11 * 60:
+                                can_morning = False
+                if can_morning:
+                    morning_staff.append(emp)
+                    evening_staff.remove(emp)
+                    break
+
+    return morning_staff, evening_staff
+
+
+def generate_week(week_num, extras=None, meeting_week=False, vacation=None):
     """Génère le planning pour une semaine du cycle de rotation."""
-    all_staff = list(STAFF) + (extras or [])
-    off_days = ROTATION[week_num]
+    base_staff = [emp for emp in STAFF if emp.name != vacation] if vacation else list(STAFF)
+    all_staff = base_staff + (extras or [])
+    off_days = get_off_days(week_num, meeting_week)
     schedule = {emp.name: [None] * 7 for emp in all_staff}
     weekly_hours = {emp.name: 0.0 for emp in all_staff}
 
@@ -163,50 +255,29 @@ def generate_week(week_num, extras=None):
         if not available:
             continue
 
-        part_timers = [e for e in available if e.name not in CDI_NAMES]
-        cdis = [e for e in available if e.name in CDI_NAMES]
-
-        # ── Dimanche : 1 seul CDI en journée complète (alternance) ──
+        # ── Dimanche : 1 seul CDI en journée complète ──
         if day == 6:
             preferred = SUNDAY_ROTATION.get(week_num)
             available_names = {e.name for e in available}
             if preferred and preferred in available_names:
                 chosen = next(e for e in available if e.name == preferred)
             else:
-                # Fallback : priorité repos consécutifs (Baptiste le moins prioritaire)
+                # Fallback : premier CDI disponible
                 fallback = [e for e in available if e.name in CDI_NAMES]
-                fallback.sort(key=lambda e: CONSECUTIVE_REST_PRIORITY.index(e.name)
-                              if e.name in CONSECUTIVE_REST_PRIORITY else 99)
-                chosen = fallback[-1] if fallback else (available[0] if available else None)
+                chosen = fallback[0] if fallback else (available[0] if available else None)
             if chosen:
                 h = min(hours_between(sh, sm, eh, em), chosen.max_daily_hours)
                 schedule[chosen.name][day] = make_shift('journee', sh, sm, eh, em)
                 schedule[chosen.name][day]['hours'] = round(h * 4) / 4
                 weekly_hours[chosen.name] += schedule[chosen.name][day]['hours']
+            # Marquer les autres comme congé dimanche
+            for emp in available:
+                if emp.name != (chosen.name if chosen else ''):
+                    schedule[emp.name][day] = {'type': 'conge', 'start': '', 'end': '', 'hours': 0}
             continue
 
-        # ── Jours Lun-Sam : alternance matin/soir par paires ──
-
-        # Répartir selon l'alternance du jour
-        morning_staff = []
-        evening_staff = []
-        for emp in available:
-            pref = get_day_preference(emp.name, day)
-            if pref == 'matin':
-                morning_staff.append(emp)
-            elif pref == 'soir':
-                evening_staff.append(emp)
-            else:
-                # Pas dans une paire (ex: extras, Maxime) → matin par défaut
-                morning_staff.append(emp)
-
-        # Garantir au moins 2 personnes en soirée pour la fermeture
-        while len(evening_staff) < 2 and len(morning_staff) > 1:
-            evening_staff.append(morning_staff.pop())
-
-        # Si personne en soirée, basculer au moins 1 personne
-        if not evening_staff and len(morning_staff) > 1:
-            evening_staff.append(morning_staff.pop())
+        # ── Jours Lun-Sam : assignation matin/soir ──
+        morning_staff, evening_staff = assign_shifts(available, day, schedule, week_num)
 
         # Assigner les shifts matin (depuis l'ouverture)
         for emp in morning_staff:
@@ -240,120 +311,35 @@ def generate_week(week_num, extras=None):
     # ── Ajustement final des heures ──
     schedule, weekly_hours = adjust_hours(schedule, weekly_hours, all_staff)
 
-    # ── Ajustements manuels par semaine ──
-    if week_num == 1:
-        schedule, weekly_hours = _override_week1(schedule, weekly_hours)
-    elif week_num == 2:
-        schedule, weekly_hours = _override_week2(schedule, weekly_hours)
-    elif week_num == 3:
+    # ── Ajustement manuel semaine 3 : shift partiel dimanche Joseph ──
+    if week_num == 3:
         schedule, weekly_hours = _override_week3(schedule, weekly_hours)
 
     return schedule, weekly_hours
 
 
-def _override_week1(schedule, weekly_hours):
-    """Semaine 1 : Alexandre fait un shift dimanche 14h15-19h15.
-
-    Compensation : -2h lundi, -1h mardi/mercredi/jeudi.
-    Soir → retirer les premières heures (shift commence plus tard).
-    Matin → retirer la dernière heure (shift finit plus tôt).
-    """
-    name = "Alexandre Corchia"
-
-    adjustments = [
-        (0, 2.0),  # Lundi : -2h
-        (1, 1.0),  # Mardi : -1h
-        (2, 1.0),  # Mercredi : -1h
-        (3, 1.0),  # Jeudi : -1h
-    ]
-
-    for day, hours_to_remove in adjustments:
-        entry = schedule[name][day]
-        if not entry or entry['hours'] <= 0:
-            continue
-
-        if entry['type'] == 'soir':
-            # Retirer les premières heures → décaler le début
-            parts = entry['start'].split(':')
-            old_start = int(parts[0]) * 60 + int(parts[1])
-            new_start = old_start + int(hours_to_remove * 60)
-            ns_h, ns_m = from_minutes(new_start)
-            entry['start'] = time_str(ns_h, ns_m)
-        elif entry['type'] == 'matin':
-            # Retirer la dernière heure → décaler la fin
-            parts = entry['end'].split(':')
-            old_end = int(parts[0]) * 60 + int(parts[1])
-            new_end = old_end - int(hours_to_remove * 60)
-            ne_h, ne_m = from_minutes(new_end)
-            entry['end'] = time_str(ne_h, ne_m)
-
-        weekly_hours[name] -= hours_to_remove
-        entry['hours'] -= hours_to_remove
-
-    # Dimanche : Alexandre fait 14h15-19h15 (5h)
-    schedule[name][6] = make_shift('soir', 14, 15, 19, 15)
-    weekly_hours[name] += schedule[name][6]['hours']
-
-    return schedule, weekly_hours
-
-
-def _override_week2(schedule, weekly_hours):
-    """Semaine 2 : Joseph fait un shift dimanche 14h15-19h15.
-
-    Compensation : -1h lundi/mercredi/jeudi + 2h de solde contrat.
-    Soir → retirer les premières heures (shift commence plus tard).
-    Matin → retirer la dernière heure (shift finit plus tôt).
-    """
-    name = "Joseph Watrinet"
-
-    adjustments = [
-        (0, 1.0),  # Lundi : -1h
-        (2, 1.0),  # Mercredi : -1h
-        (3, 1.0),  # Jeudi : -1h
-    ]
-
-    for day, hours_to_remove in adjustments:
-        entry = schedule[name][day]
-        if not entry or entry['hours'] <= 0:
-            continue
-
-        if entry['type'] == 'soir':
-            parts = entry['start'].split(':')
-            old_start = int(parts[0]) * 60 + int(parts[1])
-            new_start = old_start + int(hours_to_remove * 60)
-            ns_h, ns_m = from_minutes(new_start)
-            entry['start'] = time_str(ns_h, ns_m)
-        elif entry['type'] == 'matin':
-            parts = entry['end'].split(':')
-            old_end = int(parts[0]) * 60 + int(parts[1])
-            new_end = old_end - int(hours_to_remove * 60)
-            ne_h, ne_m = from_minutes(new_end)
-            entry['end'] = time_str(ne_h, ne_m)
-
-        weekly_hours[name] -= hours_to_remove
-        entry['hours'] -= hours_to_remove
-
-    # Dimanche : Joseph fait 14h15-19h15 (5h)
-    schedule[name][6] = make_shift('soir', 14, 15, 19, 15)
-    weekly_hours[name] += schedule[name][6]['hours']
-
-    return schedule, weekly_hours
-
-
 def _override_week3(schedule, weekly_hours):
-    """Semaine 3 : Joseph fait un shift vendredi 17h15-23h15.
+    """Semaine 3 : Joseph ne travaille que 4 jours (Lun-Mer+Sam ≈ 40h max).
 
-    Compensation : -1h lundi/mardi/mercredi/jeudi.
-    Soir → retirer les premières heures (shift commence plus tard).
-    Matin → retirer la dernière heure (shift finit plus tôt).
+    Compensation : shift partiel dimanche 14h15-19h15 (5h),
+    puis réduire les heures des jours travaillés (-1h Lun/Mar/Mer).
     """
     name = "Joseph Watrinet"
 
+    # Vérifier que Joseph ne travaille pas déjà dimanche
+    dim_entry = schedule[name][6]
+    if dim_entry and dim_entry.get('hours', 0) > 0:
+        return schedule, weekly_hours
+
+    # Ajouter shift dimanche 14h15-19h15 (5h)
+    schedule[name][6] = make_shift('soir', 14, 15, 19, 15)
+    weekly_hours[name] += schedule[name][6]['hours']
+
+    # Compenser en retirant 1h sur Lun/Mar/Mer
     adjustments = [
         (0, 1.0),  # Lundi : -1h
         (1, 1.0),  # Mardi : -1h
         (2, 1.0),  # Mercredi : -1h
-        (3, 1.0),  # Jeudi : -1h
     ]
 
     for day, hours_to_remove in adjustments:
@@ -376,16 +362,16 @@ def _override_week3(schedule, weekly_hours):
 
         weekly_hours[name] -= hours_to_remove
         entry['hours'] -= hours_to_remove
-
-    # Vendredi : Joseph fait 17h15-23h15 (6h) — remplace son congé
-    schedule[name][4] = make_shift('soir', 17, 15, 23, 15)
-    weekly_hours[name] += schedule[name][4]['hours']
 
     return schedule, weekly_hours
 
 
 def fix_rest_time(schedule, weekly_hours, staff_list=None):
-    """Garantit 11h de repos minimum entre 2 shifts consécutifs."""
+    """Garantit 11h de repos minimum entre 2 shifts consécutifs.
+
+    Si le shift du lendemain est matin : raccourcir la fin (protège le début 9:45).
+    Si le shift du lendemain est soir : retarder le début.
+    """
     staff_list = staff_list or STAFF
     MIN_REST = 11 * 60  # en minutes
 
@@ -409,21 +395,35 @@ def fix_rest_time(schedule, weekly_hours, staff_list=None):
             if rest >= MIN_REST:
                 continue
 
-            # Besoin de décaler. Retarder le début du shift du lendemain.
             needed = MIN_REST - rest
-            new_start = start_min + needed
-            ns_h, ns_m = from_minutes(new_start)
 
-            # Recalculer les heures
-            end_tomorrow = tomorrow['end'].split(':')
-            end_tom_min = int(end_tomorrow[0]) * 60 + int(end_tomorrow[1])
-            new_hours = (end_tom_min - new_start) / 60
-            new_hours = round(new_hours * 4) / 4
+            if tomorrow['type'] == 'matin':
+                # Protéger le début 9:45 : raccourcir la fin du shift matin
+                end_tomorrow = tomorrow['end'].split(':')
+                end_tom_min = int(end_tomorrow[0]) * 60 + int(end_tomorrow[1])
+                new_end = end_tom_min - needed
+                ne_h, ne_m = from_minutes(new_end)
+                new_hours = (new_end - start_min) / 60
+                new_hours = round(new_hours * 4) / 4
 
-            old_hours = tomorrow['hours']
-            tomorrow['start'] = time_str(ns_h, ns_m)
-            tomorrow['hours'] = new_hours
-            weekly_hours[emp.name] += (new_hours - old_hours)
+                old_hours = tomorrow['hours']
+                tomorrow['end'] = time_str(ne_h, ne_m)
+                tomorrow['hours'] = new_hours
+                weekly_hours[emp.name] += (new_hours - old_hours)
+            else:
+                # Shift soir ou journée : retarder le début
+                new_start = start_min + needed
+                ns_h, ns_m = from_minutes(new_start)
+
+                end_tomorrow = tomorrow['end'].split(':')
+                end_tom_min = int(end_tomorrow[0]) * 60 + int(end_tomorrow[1])
+                new_hours = (end_tom_min - new_start) / 60
+                new_hours = round(new_hours * 4) / 4
+
+                old_hours = tomorrow['hours']
+                tomorrow['start'] = time_str(ns_h, ns_m)
+                tomorrow['hours'] = new_hours
+                weekly_hours[emp.name] += (new_hours - old_hours)
 
     return schedule, weekly_hours
 
@@ -542,6 +542,9 @@ def check_labor_law(schedule, weekly_hours, staff_list=None):
             off_days[i + 1] - off_days[i] == 1
             for i in range(len(off_days) - 1)
         )
+        # Wrap-around : Dimanche(6) + Lundi(0) = consécutifs
+        if not has_consecutive and 6 in off_days and 0 in off_days:
+            has_consecutive = True
         if not has_consecutive and off_days:
             warnings.append(
                 f"{emp.name} : pas de 2 jours de repos consécutifs "
@@ -589,16 +592,19 @@ def time_24_to_12(t):
 SHIFT_TITLES = {'matin': 'Matin', 'soir': 'Soir', 'journee': 'Journée'}
 
 
-def export_connecteam_csv(start_date, num_weeks, first_week_type, extras=None):
+def export_connecteam_csv(start_date, num_weeks, first_week_type, extras=None, vacation=None):
     """Génère un CSV Connecteam pour une plage de dates."""
-    all_staff = list(STAFF) + (extras or [])
+    base_staff = [emp for emp in STAFF if emp.name != vacation] if vacation else list(STAFF)
+    all_staff = base_staff + (extras or [])
     header = "Date,Start,End,Timezone,Unpaid break,Paid break,Shift title,Job,Sub item,Shift tags,Users,Address,Note,Number of users,Require Approval,Tasks"
     rows = [header]
 
     current_monday = start_date
     for week_offset in range(num_weeks):
         week_type = ((first_week_type - 1 + week_offset) % 3) + 1
-        schedule, _ = generate_week(week_type, extras=extras)
+        # Détection réunion automatique par date
+        mw = is_meeting_week(current_monday) if week_type == 3 else False
+        schedule, _ = generate_week(week_type, extras=extras, meeting_week=mw, vacation=vacation)
 
         for day in range(7):
             current_date = current_monday + datetime.timedelta(days=day)
@@ -637,12 +643,31 @@ def main():
         "*(staff : +15min avant/après)*"
     )
 
-    col1, col2 = st.columns([1, 3])
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         week_num = st.selectbox(
             "Semaine du cycle",
             [1, 2, 3],
             format_func=lambda w: f"Semaine {w}/3",
+        )
+    with col2:
+        meeting_week = st.checkbox(
+            "Réunion direction ce lundi",
+            value=False,
+            help="Cocher si Baptiste a sa réunion direction ce lundi (1 lundi sur 2). Impacte uniquement la Semaine 3.",
+        )
+        if meeting_week and week_num == 3:
+            st.caption("Baptiste off Mar+Mer (travaille Lundi)")
+        elif week_num == 3:
+            st.caption("Baptiste off Lun+Mar")
+
+    # ── Vacances ──
+    with col3:
+        vacation_options = ["Aucun"] + [emp.name for emp in STAFF]
+        vacation_choice = st.selectbox(
+            "Employé en vacances",
+            vacation_options,
+            help="Sélectionner un employé absent cette semaine. Le planning sera ajusté.",
         )
 
     # ── Extra ──
@@ -666,18 +691,25 @@ def main():
             ))
             st.success(f"Extra ajouté : **{extra_name}** — {', '.join(extra_days)} ({extra_hours}h/jour)")
 
-    all_staff = list(STAFF) + extras
+    # Filtrer le staff en vacances
+    active_staff = [emp for emp in STAFF if emp.name != vacation_choice]
+    all_staff = list(active_staff) + extras
+
+    if vacation_choice != "Aucun":
+        st.warning(f"**{vacation_choice}** est en vacances cette semaine. Planning ajusté.")
 
     # Afficher les congés
-    off = ROTATION[week_num]
+    off = get_off_days(week_num, meeting_week)
     off_text = " | ".join(
         f"**{name.split()[0]}** : {', '.join(JOURS[d] for d in sorted(days))}"
         for name, days in off.items()
+        if name != vacation_choice
     )
     st.info(f"Congés : {off_text}")
 
     # Générer
-    schedule, weekly_hours = generate_week(week_num, extras=extras)
+    vacation = vacation_choice if vacation_choice != "Aucun" else None
+    schedule, weekly_hours = generate_week(week_num, extras=extras, meeting_week=meeting_week, vacation=vacation)
     warnings, staffing_issues = check_labor_law(schedule, weekly_hours, all_staff)
 
     # ── Grille planning ──
@@ -748,8 +780,9 @@ def main():
     # ── Vue 3 semaines ──
     with st.expander("Voir les 3 semaines du cycle"):
         for w in [1, 2, 3]:
-            st.markdown(f"#### Semaine {w}")
-            s, wh = generate_week(w, extras=extras)
+            meeting_label = " (réunion)" if w == 3 and meeting_week else ""
+            st.markdown(f"#### Semaine {w}{meeting_label}")
+            s, wh = generate_week(w, extras=extras, meeting_week=(meeting_week if w == 3 else False), vacation=vacation)
             st.markdown(build_schedule_html(s, wh, all_staff), unsafe_allow_html=True)
             _, issues = check_labor_law(s, wh, all_staff)
             if issues:
@@ -800,7 +833,7 @@ def main():
         f"({num_weeks} semaines, rotation {first_week}→{((first_week - 1 + num_weeks - 1) % 3) + 1})"
     )
 
-    csv_data = export_connecteam_csv(start_date, num_weeks, first_week, extras=extras)
+    csv_data = export_connecteam_csv(start_date, num_weeks, first_week, extras=extras, vacation=vacation)
     st.download_button(
         "Télécharger le CSV Connecteam",
         data=csv_data,
