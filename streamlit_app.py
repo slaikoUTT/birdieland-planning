@@ -4,7 +4,33 @@ import streamlit as st
 import datetime
 from dataclasses import dataclass
 
+APP_VERSION = "1.0.0"
+
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
+
+
+# ── Authentification ──────────────────────────────────────────────────────
+
+def check_auth():
+    """Vérifie le login/mot de passe via st.secrets."""
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown("### Connexion")
+    login = st.text_input("Identifiant")
+    password = st.text_input("Mot de passe", type="password")
+
+    if st.button("Se connecter", type="primary"):
+        expected_login = st.secrets["auth"]["login"]
+        expected_password = st.secrets["auth"]["password"]
+        if login == expected_login and password == expected_password:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Identifiant ou mot de passe incorrect")
+
+    st.caption(f"v{APP_VERSION}")
+    return False
 
 # ── Données staff ──────────────────────────────────────────────────────────
 
@@ -600,7 +626,11 @@ def export_connecteam_csv(start_date, num_weeks, first_week_type, extras=None):
 # ── Interface Streamlit ────────────────────────────────────────────────────
 
 def main():
+    if not check_auth():
+        return
+
     st.title("Planning Staff - Birdieland Réaumur")
+    st.caption(f"v{APP_VERSION}")
 
     st.markdown(
         "**Horaires** : Lun 10h-22h | Mar-Sam 10h-23h | Dim 11h-19h "
