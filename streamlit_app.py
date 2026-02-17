@@ -2,6 +2,7 @@
 
 import streamlit as st
 import datetime
+import hashlib
 from dataclasses import dataclass
 
 APP_VERSION = "2.1.0"
@@ -11,9 +12,22 @@ st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
 # ── Authentification ──────────────────────────────────────────────────────
 
+def _auth_token():
+    """Génère un token de session basé sur les credentials."""
+    login = st.secrets["auth"]["login"]
+    password = st.secrets["auth"]["password"]
+    return hashlib.sha256(f"{login}:{password}:birdieland".encode()).hexdigest()[:20]
+
+
 def check_auth():
-    """Vérifie le login/mot de passe via st.secrets."""
+    """Vérifie le login/mot de passe via st.secrets, avec persistance par token URL."""
     if st.session_state.get("authenticated"):
+        return True
+
+    # Vérifier si un token valide est dans l'URL (survit au refresh)
+    token_param = st.query_params.get("session")
+    if token_param and token_param == _auth_token():
+        st.session_state["authenticated"] = True
         return True
 
     st.markdown("### Connexion")
@@ -25,6 +39,7 @@ def check_auth():
         expected_password = st.secrets["auth"]["password"]
         if login == expected_login and password == expected_password:
             st.session_state["authenticated"] = True
+            st.query_params["session"] = _auth_token()
             st.rerun()
         else:
             st.error("Identifiant ou mot de passe incorrect")
