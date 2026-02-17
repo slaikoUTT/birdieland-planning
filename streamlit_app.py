@@ -4,7 +4,7 @@ import streamlit as st
 import datetime
 from dataclasses import dataclass
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
