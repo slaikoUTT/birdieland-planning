@@ -843,14 +843,18 @@ def main():
     )
 
 
+JOURS_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+
+
 def _planning_css():
-    """CSS adaptatif light/dark mode pour les tableaux du planning."""
+    """CSS adaptatif light/dark mode + responsive mobile."""
     return """<style>
-    .pl-table { width:100%; border-collapse:collapse; font-size:13px; font-family:sans-serif; }
+    .pl-scroll { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .pl-table { width:100%; border-collapse:collapse; font-size:13px; font-family:sans-serif; min-width:700px; }
     .pl-table th, .pl-table td { padding:8px; border:1px solid rgba(128,128,128,0.3); }
     .pl-table th { text-align:center; }
     .pl-hdr { background:rgba(44,62,80,0.9); color:white; }
-    .pl-name { font-weight:bold; text-align:left; }
+    .pl-name { font-weight:bold; text-align:left; white-space:nowrap; }
     .pl-role { font-size:11px; font-weight:normal; opacity:0.65; }
     .pl-matin { background:rgba(52,152,219,0.2); }
     .pl-soir { background:rgba(230,126,34,0.2); }
@@ -868,6 +872,8 @@ def _planning_css():
     .pl-cov3 { background:rgba(52,152,219,0.25); }
     .pl-covoff { background:rgba(128,128,128,0.1); opacity:0.4; }
     .pl-covtip { font-size:10px; opacity:0.6; }
+    .pl-day-full { display:inline; }
+    .pl-day-short { display:none; }
     @media (prefers-color-scheme: dark) {
         .pl-matin { background:rgba(52,152,219,0.3); }
         .pl-soir { background:rgba(230,126,34,0.3); }
@@ -877,6 +883,17 @@ def _planning_css():
         .pl-cov1 { background:rgba(241,196,15,0.3); }
         .pl-cov2 { background:rgba(46,204,113,0.3); }
         .pl-cov3 { background:rgba(52,152,219,0.35); }
+    }
+    @media (max-width: 768px) {
+        .pl-table { font-size:11px; min-width:580px; }
+        .pl-table th, .pl-table td { padding:4px 3px; }
+        .pl-name { font-size:11px; }
+        .pl-role { font-size:9px; }
+        .pl-hours { font-size:9px; }
+        .pl-covtip { font-size:8px; }
+        .pl-total { font-size:11px; }
+        .pl-day-full { display:none; }
+        .pl-day-short { display:inline; }
     }
     </style>"""
 
@@ -900,13 +917,14 @@ def build_schedule_html(schedule, weekly_hours=None, staff_list=None):
     }
 
     html = _planning_css()
-    html += '<table class="pl-table">'
+    html += '<div class="pl-scroll"><table class="pl-table">'
 
     # Header
     html += '<tr class="pl-hdr">'
     html += '<th style="text-align:left; width:100px;">Staff</th>'
-    for jour in JOURS:
-        html += f'<th>{jour}</th>'
+    for i, jour in enumerate(JOURS):
+        short = JOURS_SHORT[i]
+        html += f'<th><span class="pl-day-full">{jour}</span><span class="pl-day-short">{short}</span></th>'
     html += '<th style="width:70px;">Total</th>'
     html += '</tr>'
 
@@ -953,18 +971,19 @@ def build_schedule_html(schedule, weekly_hours=None, staff_list=None):
         )
         html += '</tr>'
 
-    html += '</table>'
+    html += '</table></div>'
     return html
 
 
 def build_coverage_html(schedule, staff_list=None):
     """Tableau de couverture : nombre de personnes par créneau horaire."""
     staff_list = staff_list or STAFF
-    html = '<table class="pl-table" style="font-size:12px;">'
+    html = '<div class="pl-scroll"><table class="pl-table" style="font-size:12px;">'
     html += '<tr class="pl-hdr">'
     html += '<th style="padding:6px;">Créneau</th>'
-    for jour in JOURS:
-        html += f'<th style="padding:6px;">{jour}</th>'
+    for i, jour in enumerate(JOURS):
+        short = JOURS_SHORT[i]
+        html += f'<th style="padding:6px;"><span class="pl-day-full">{jour}</span><span class="pl-day-short">{short}</span></th>'
     html += '</tr>'
 
     # Créneaux de 2h
@@ -1031,7 +1050,7 @@ def build_coverage_html(schedule, staff_list=None):
 
         html += '</tr>'
 
-    html += '</table>'
+    html += '</table></div>'
     return html
 
 
