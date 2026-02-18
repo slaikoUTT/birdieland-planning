@@ -5,7 +5,7 @@ import datetime
 import hashlib
 from dataclasses import dataclass
 
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.1.1"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -30,11 +30,115 @@ def check_auth():
         st.session_state["authenticated"] = True
         return True
 
-    st.markdown("### Connexion")
+    st.markdown("""
+    <style>
+    #MainMenu, header, footer { visibility: hidden; }
+    .stAppDeployButton { display: none; }
+
+    .stApp {
+        background: linear-gradient(160deg, #0f2318 0%, #1e4d2b 45%, #0f2318 100%);
+        min-height: 100vh;
+    }
+
+    .block-container {
+        max-width: 400px !important;
+        padding: 10vh 2rem 2rem !important;
+        margin: 0 auto !important;
+    }
+
+    .golf-header {
+        text-align: center;
+        margin-bottom: 36px;
+    }
+    .golf-icon {
+        font-size: 48px;
+        display: block;
+        margin-bottom: 12px;
+    }
+    .golf-brand {
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 28px;
+        font-weight: bold;
+        color: #e8f0e8;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+    }
+    .golf-sub {
+        font-family: Georgia, serif;
+        font-size: 12px;
+        color: #7aab8a;
+        letter-spacing: 2px;
+        font-style: italic;
+        margin-top: 4px;
+    }
+    .golf-divider {
+        border: none;
+        border-top: 1px solid rgba(122,171,138,0.4);
+        margin: 0 20% 32px;
+    }
+
+    .stTextInput label {
+        color: #a8c8a8 !important;
+        font-size: 10px !important;
+        font-weight: 700 !important;
+        letter-spacing: 2px !important;
+        text-transform: uppercase !important;
+    }
+    .stTextInput input {
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(122,171,138,0.35) !important;
+        border-radius: 2px !important;
+        color: #e8f0e8 !important;
+        font-size: 15px !important;
+    }
+    .stTextInput input:focus {
+        border-color: #7aab8a !important;
+        box-shadow: 0 0 0 2px rgba(122,171,138,0.2) !important;
+        background: rgba(255,255,255,0.1) !important;
+    }
+    .stTextInput input::placeholder { color: rgba(168,200,168,0.35) !important; }
+
+    .stButton > button {
+        background: transparent !important;
+        color: #a8c8a8 !important;
+        border: 1px solid rgba(122,171,138,0.5) !important;
+        border-radius: 2px !important;
+        width: 100% !important;
+        padding: 12px !important;
+        font-size: 11px !important;
+        letter-spacing: 3px !important;
+        text-transform: uppercase !important;
+        font-weight: 700 !important;
+        margin-top: 12px !important;
+        transition: all 0.2s !important;
+    }
+    .stButton > button:hover {
+        background: rgba(122,171,138,0.15) !important;
+        border-color: #7aab8a !important;
+        color: #e8f0e8 !important;
+    }
+
+    .golf-version {
+        text-align: center;
+        font-size: 10px;
+        color: rgba(122,171,138,0.4);
+        letter-spacing: 2px;
+        margin-top: 32px;
+    }
+    </style>
+
+    <div class="golf-header">
+        <span class="golf-icon">⛳</span>
+        <div class="golf-brand">Birdieland</div>
+        <div class="golf-sub">Staff Planning · Réaumur</div>
+    </div>
+    <hr class="golf-divider">
+    """, unsafe_allow_html=True)
+
     login = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
-    if st.button("Se connecter", type="primary"):
+    if st.button("Accéder au planning"):
         expected_login = st.secrets["auth"]["login"]
         expected_password = st.secrets["auth"]["password"]
         if login == expected_login and password == expected_password:
@@ -44,7 +148,7 @@ def check_auth():
         else:
             st.error("Identifiant ou mot de passe incorrect")
 
-    st.caption(f"v{APP_VERSION}")
+    st.markdown(f'<div class="golf-version">v{APP_VERSION}</div>', unsafe_allow_html=True)
     return False
 
 # ── Données staff ──────────────────────────────────────────────────────────
