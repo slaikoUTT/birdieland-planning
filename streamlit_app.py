@@ -5,7 +5,7 @@ import datetime
 import hashlib
 from dataclasses import dataclass
 
-APP_VERSION = "3.0.1"
+APP_VERSION = "3.1.0"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -875,28 +875,43 @@ def main():
     )
 
     # ── Modifications manuelles de shifts ──
+    if 'week_overrides' not in st.session_state:
+        st.session_state.week_overrides = {1: [], 2: [], 3: []}
+    if 'override_counter' not in st.session_state:
+        st.session_state.override_counter = 0
+
+    jour_map = {j: idx for idx, j in enumerate(JOURS)}
     manual_overrides = []
-    with st.expander("Modifier un shift manuellement"):
-        st.caption("Remplacer un shift généré automatiquement")
-        if 'n_overrides' not in st.session_state:
-            st.session_state.n_overrides = 1
-        for i in range(st.session_state.n_overrides):
-            st.markdown(f"**Modification {i + 1}**")
-            oc1, oc2, oc3, oc4, oc5 = st.columns([2, 1, 1, 1, 1])
+    to_delete = None
+
+    with st.expander(f"Modifier un shift — Semaine {week_num}/3"):
+        st.caption(f"Modifications actives pour la semaine {week_num}/3")
+        current_ovs = st.session_state.week_overrides[week_num]
+
+        for ov in current_ovs:
+            oid = ov['id']
+            oc1, oc2, oc3, oc4, oc5, oc6 = st.columns([2, 1, 1, 1, 1, 0.4])
+            emp_names = [e.name for e in all_staff]
             with oc1:
-                ov_emp = st.selectbox("Employé", [e.name for e in all_staff], key=f"ov_emp_{i}")
+                default_emp_idx = emp_names.index(ov['employee']) if ov['employee'] in emp_names else 0
+                ov_emp = st.selectbox("Employé", emp_names, index=default_emp_idx, key=f"ov_emp_{oid}")
             with oc2:
-                ov_day = st.selectbox("Jour", JOURS, key=f"ov_day_{i}")
+                ov_day = st.selectbox("Jour", JOURS, index=ov['day'], key=f"ov_day_{oid}")
             with oc3:
-                ov_type = st.selectbox("Type", ["matin", "soir", "journee", "conge"], key=f"ov_type_{i}")
+                type_opts = ["matin", "soir", "journee", "conge"]
+                default_type_idx = type_opts.index(ov['type']) if ov['type'] in type_opts else 0
+                ov_type = st.selectbox("Type", type_opts, index=default_type_idx, key=f"ov_type_{oid}")
             with oc4:
-                ov_start = st.text_input("Début", value="9:45", key=f"ov_start_{i}",
+                ov_start = st.text_input("Début", value=ov['start'], key=f"ov_start_{oid}",
                                          disabled=(ov_type == "conge"))
             with oc5:
-                ov_end = st.text_input("Fin", value="18:15", key=f"ov_end_{i}",
+                ov_end = st.text_input("Fin", value=ov['end'], key=f"ov_end_{oid}",
                                        disabled=(ov_type == "conge"))
+            with oc6:
+                st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+                if st.button("×", key=f"del_ov_{oid}", help="Supprimer cette modification"):
+                    to_delete = oid
 
-            jour_map = {j: idx for idx, j in enumerate(JOURS)}
             manual_overrides.append({
                 'employee': ov_emp,
                 'day': jour_map[ov_day],
@@ -904,31 +919,33 @@ def main():
                 'start': ov_start,
                 'end': ov_end,
             })
-        if st.button("+ Ajouter une modification"):
-            st.session_state.n_overrides += 1
+
+        if not current_ovs:
+            st.caption("Aucune modification pour cette semaine.")
+
+        if st.button("+ Ajouter une modification", key=f"add_ov_{week_num}"):
+            st.session_state.override_counter += 1
+            oid = st.session_state.override_counter
+            emp_default = all_staff[0].name if all_staff else ''
+            st.session_state.week_overrides[week_num].append({
+                'id': oid,
+                'employee': emp_default,
+                'day': 0,
+                'type': 'matin',
+                'start': '9:45',
+                'end': '18:15',
+            })
             st.rerun()
 
-    # Appliquer les modifications manuelles seulement si l'utilisateur a interagi
-    if manual_overrides and any(
-        st.session_state.get(f"ov_emp_{i}") is not None
-        for i in range(st.session_state.get('n_overrides', 0))
-    ):
-        # Vérifier qu'au moins un override a des valeurs non-par-défaut
-        has_real_override = False
-        for i, ov in enumerate(manual_overrides):
-            if ov['type'] == 'conge':
-                has_real_override = True
-                break
-            try:
-                s = ov['start'].split(':')
-                e = ov['end'].split(':')
-                if len(s) == 2 and len(e) == 2:
-                    int(s[0]); int(s[1]); int(e[0]); int(e[1])
-                    has_real_override = True
-            except (ValueError, IndexError):
-                pass
-        if has_real_override:
-            schedule, weekly_hours = apply_manual_overrides(schedule, weekly_hours, manual_overrides)
+    if to_delete is not None:
+        st.session_state.week_overrides[week_num] = [
+            o for o in st.session_state.week_overrides[week_num] if o['id'] != to_delete
+        ]
+        st.rerun()
+
+    # Appliquer les modifications manuelles
+    if manual_overrides:
+        schedule, weekly_hours = apply_manual_overrides(schedule, weekly_hours, manual_overrides)
 
     warnings, staffing_issues = check_labor_law(schedule, weekly_hours, all_staff)
 
