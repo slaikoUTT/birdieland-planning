@@ -5,7 +5,7 @@ import datetime
 import hashlib
 from dataclasses import dataclass
 
-APP_VERSION = "3.1.1"
+APP_VERSION = "3.2.0"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -876,7 +876,144 @@ def main():
     if not check_auth():
         return
 
-    st.title("Planning Staff - Birdieland Réaumur")
+    st.markdown("""
+    <style>
+    #MainMenu, footer { visibility: hidden; }
+    .stAppDeployButton { display: none; }
+
+    /* ── Fond global ── */
+    .stApp {
+        background: linear-gradient(160deg, #0f2318 0%, #1e4d2b 45%, #0f2318 100%);
+        min-height: 100vh;
+    }
+
+    /* ── Textes généraux ── */
+    .stApp, .stMarkdown, .stText, p, li, span, label {
+        color: #d8ead8 !important;
+    }
+    h1, h2, h3 {
+        font-family: Georgia, 'Times New Roman', serif !important;
+        color: #e8f0e8 !important;
+        letter-spacing: 2px !important;
+    }
+    h1 { font-size: 26px !important; letter-spacing: 3px !important; }
+    h2 { font-size: 18px !important; border-bottom: 1px solid rgba(122,171,138,0.3); padding-bottom: 6px; }
+    h3 { font-size: 15px !important; }
+
+    /* ── Captions ── */
+    .stCaptionContainer p, small, .stCaption { color: rgba(122,171,138,0.7) !important; }
+
+    /* ── Labels widgets ── */
+    .stSelectbox label, .stCheckbox label, .stNumberInput label,
+    .stDateInput label, .stTextInput label, .stMultiSelect label {
+        color: #a8c8a8 !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        letter-spacing: 1.5px !important;
+        text-transform: uppercase !important;
+    }
+
+    /* ── Inputs / selects ── */
+    .stSelectbox > div > div,
+    .stTextInput input,
+    .stNumberInput input,
+    .stDateInput input {
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(122,171,138,0.3) !important;
+        border-radius: 2px !important;
+        color: #e8f0e8 !important;
+    }
+    .stSelectbox svg { fill: #7aab8a !important; }
+
+    /* ── Multiselect ── */
+    .stMultiSelect > div > div {
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(122,171,138,0.3) !important;
+        border-radius: 2px !important;
+    }
+    .stMultiSelect span[data-baseweb="tag"] {
+        background: rgba(122,171,138,0.25) !important;
+        color: #e8f0e8 !important;
+    }
+
+    /* ── Checkbox ── */
+    .stCheckbox input[type="checkbox"] { accent-color: #7aab8a; }
+
+    /* ── Boutons ── */
+    .stButton > button {
+        background: transparent !important;
+        color: #a8c8a8 !important;
+        border: 1px solid rgba(122,171,138,0.5) !important;
+        border-radius: 2px !important;
+        font-size: 11px !important;
+        letter-spacing: 2px !important;
+        text-transform: uppercase !important;
+        font-weight: 700 !important;
+        transition: all 0.2s !important;
+    }
+    .stButton > button:hover {
+        background: rgba(122,171,138,0.15) !important;
+        border-color: #7aab8a !important;
+        color: #e8f0e8 !important;
+    }
+
+    /* ── Download button ── */
+    .stDownloadButton > button {
+        background: rgba(122,171,138,0.2) !important;
+        color: #e8f0e8 !important;
+        border: 1px solid rgba(122,171,138,0.6) !important;
+        border-radius: 2px !important;
+        letter-spacing: 2px !important;
+        text-transform: uppercase !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+    }
+    .stDownloadButton > button:hover {
+        background: rgba(122,171,138,0.35) !important;
+    }
+
+    /* ── Expanders ── */
+    .streamlit-expanderHeader {
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(122,171,138,0.2) !important;
+        border-radius: 2px !important;
+        color: #a8c8a8 !important;
+        font-size: 12px !important;
+        letter-spacing: 1px !important;
+    }
+    .streamlit-expanderContent {
+        background: rgba(0,0,0,0.15) !important;
+        border: 1px solid rgba(122,171,138,0.15) !important;
+        border-top: none !important;
+    }
+
+    /* ── Alertes ── */
+    .stAlert { border-radius: 2px !important; border-left-width: 3px !important; }
+    [data-baseweb="notification"] { background: rgba(0,0,0,0.3) !important; }
+
+    /* ── Info box ── */
+    .stInfo { background: rgba(122,171,138,0.1) !important; border-left-color: #7aab8a !important; }
+    .stWarning { background: rgba(230,180,50,0.1) !important; }
+    .stSuccess { background: rgba(46,204,113,0.1) !important; }
+    .stError { background: rgba(231,76,60,0.1) !important; }
+
+    /* ── Dataframe ── */
+    .stDataFrame { border: 1px solid rgba(122,171,138,0.2) !important; border-radius: 2px !important; }
+
+    /* ── Divider ── */
+    hr { border-color: rgba(122,171,138,0.2) !important; }
+
+    /* ── Sidebar (si utilisée) ── */
+    .css-1d391kg { background: #0f2318 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(
+        '<h1 style="display:inline;">⛳ Birdieland</h1>'
+        '<span style="font-family:Georgia,serif; font-size:14px; color:#7aab8a; '
+        'letter-spacing:2px; margin-left:16px; font-style:italic;">Staff Planning · Réaumur</span>',
+        unsafe_allow_html=True,
+    )
     st.caption(f"v{APP_VERSION}")
 
     st.markdown(
