@@ -5,7 +5,7 @@ import datetime
 import hashlib
 from dataclasses import dataclass
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "3.0.0"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -243,11 +243,19 @@ def assign_shifts(available, day, schedule, week_num):
     return morning_staff, evening_staff
 
 
-def generate_week(week_num, extras=None, meeting_week=False, vacation=None):
+def generate_week(week_num, extras=None, meeting_week=False, vacation=None, custom_off_days=None):
     """Génère le planning pour une semaine du cycle de rotation."""
     base_staff = [emp for emp in STAFF if emp.name != vacation] if vacation else list(STAFF)
     all_staff = base_staff + (extras or [])
     off_days = get_off_days(week_num, meeting_week)
+    # Fusionner les jours d'absence custom (vacances par jour)
+    if custom_off_days:
+        off_days = dict(off_days)  # copie
+        for emp_name, days in custom_off_days.items():
+            if emp_name in off_days:
+                off_days[emp_name] = off_days[emp_name] | days
+            else:
+                off_days[emp_name] = days
     schedule = {emp.name: [None] * 7 for emp in all_staff}
     weekly_hours = {emp.name: 0.0 for emp in all_staff}
 
@@ -326,58 +334,179 @@ def generate_week(week_num, extras=None, meeting_week=False, vacation=None):
     # ── Ajustement final des heures ──
     schedule, weekly_hours = adjust_hours(schedule, weekly_hours, all_staff)
 
-    # ── Ajustement manuel semaine 3 : shift partiel dimanche Joseph ──
-    if week_num == 3:
+    # ── Ajustements manuels par semaine ──
+    if week_num == 1:
+        schedule, weekly_hours = _override_week1(schedule, weekly_hours)
+    elif week_num == 2:
+        schedule, weekly_hours = _override_week2(schedule, weekly_hours)
+    elif week_num == 3:
         schedule, weekly_hours = _override_week3(schedule, weekly_hours)
 
     return schedule, weekly_hours
 
 
-def _override_week3(schedule, weekly_hours):
-    """Semaine 3 : Joseph ne travaille que 4 jours (Lun-Mer+Sam ≈ 40h max).
+# ── Helpers pour ajuster les shifts ──────────────────────────────────────
 
-    Compensation : shift partiel dimanche 14h15-19h15 (5h),
-    puis réduire les heures des jours travaillés (-1h Lun/Mar/Mer).
+def _reduce_shift(entry, hours_to_remove):
+    """Réduit un shift : soir → commence plus tard, matin → finit plus tôt."""
+    parts_key = 'start' if entry['type'] == 'soir' else 'end'
+    parts = entry[parts_key].split(':')
+    old_min = int(parts[0]) * 60 + int(parts[1])
+    delta = int(hours_to_remove * 60)
+    new_min = old_min + delta if parts_key == 'start' else old_min - delta
+    h, m = from_minutes(new_min)
+    entry[parts_key] = time_str(h, m)
+    entry['hours'] -= hours_to_remove
+
+
+def _extend_shift(entry, hours_to_add):
+    """Étend un shift : matin → finit plus tard, soir → commence plus tôt."""
+    parts_key = 'end' if entry['type'] == 'matin' else 'start'
+    parts = entry[parts_key].split(':')
+    old_min = int(parts[0]) * 60 + int(parts[1])
+    delta = int(hours_to_add * 60)
+    new_min = old_min + delta if parts_key == 'end' else old_min - delta
+    h, m = from_minutes(new_min)
+    entry[parts_key] = time_str(h, m)
+    entry['hours'] += hours_to_add
+
+
+# ── Overrides par semaine ────────────────────────────────────────────────
+
+def _override_week1(schedule, weekly_hours):
+    """Semaine 1 :
+    - Alexandre : commence 2h+ tard lun, 1h+ tard mar/mer/sam → dimanche 14h15-19h15.
+    - Joseph : shift matin le samedi 9h15-18h15.
     """
-    name = "Joseph Watrinet"
+    alex = "Alexandre Corchia"
+    for day, h in [(0, 2.0), (1, 1.0), (2, 1.0), (5, 1.0)]:
+        entry = schedule[alex][day]
+        if entry and entry['hours'] > 0:
+            _reduce_shift(entry, h)
+            weekly_hours[alex] -= h
+    schedule[alex][6] = make_shift('soir', 14, 15, 19, 15)
+    weekly_hours[alex] += schedule[alex][6]['hours']
 
-    # Vérifier que Joseph ne travaille pas déjà dimanche
-    dim_entry = schedule[name][6]
-    if dim_entry and dim_entry.get('hours', 0) > 0:
-        return schedule, weekly_hours
+    joseph = "Joseph Watrinet"
+    old_h = schedule[joseph][5]['hours'] if schedule[joseph][5] and schedule[joseph][5].get('hours', 0) > 0 else 0
+    schedule[joseph][5] = make_shift('matin', 9, 15, 18, 15)
+    weekly_hours[joseph] += schedule[joseph][5]['hours'] - old_h
 
-    # Ajouter shift dimanche 14h15-19h15 (5h)
-    schedule[name][6] = make_shift('soir', 14, 15, 19, 15)
-    weekly_hours[name] += schedule[name][6]['hours']
+    return schedule, weekly_hours
 
-    # Compenser en retirant 1h sur Lun/Mar/Mer
-    adjustments = [
-        (0, 1.0),  # Lundi : -1h
-        (1, 1.0),  # Mardi : -1h
-        (2, 1.0),  # Mercredi : -1h
-    ]
 
-    for day, hours_to_remove in adjustments:
-        entry = schedule[name][day]
-        if not entry or entry['hours'] <= 0:
+def _override_week2(schedule, weekly_hours):
+    """Semaine 2 :
+    - Alexandre : commence 2h+ tard lun, 1h+ tard jeu/ven/sam → dimanche 14h15-19h15.
+    - Joseph matin + Maxime soir le jeudi et vendredi.
+    """
+    alex = "Alexandre Corchia"
+    for day, h in [(0, 2.0), (3, 1.0), (4, 1.0), (5, 1.0)]:
+        entry = schedule[alex][day]
+        if entry and entry['hours'] > 0:
+            _reduce_shift(entry, h)
+            weekly_hours[alex] -= h
+    schedule[alex][6] = make_shift('soir', 14, 15, 19, 15)
+    weekly_hours[alex] += schedule[alex][6]['hours']
+
+    joseph, maxime = "Joseph Watrinet", "Maxime Bancquart"
+    for day in [3, 4]:
+        sh, sm = HORAIRES[day][:2]
+        eh, em = HORAIRES[day][2:]
+        # Joseph → matin
+        old_j = schedule[joseph][day]['hours'] if schedule[joseph][day] and schedule[joseph][day].get('hours', 0) > 0 else 0
+        end_min = to_minutes(sh, sm) + int(8.5 * 60)
+        mh, mm = from_minutes(end_min)
+        schedule[joseph][day] = make_shift('matin', sh, sm, mh, mm)
+        weekly_hours[joseph] += schedule[joseph][day]['hours'] - old_j
+        # Maxime → soir
+        old_m = schedule[maxime][day]['hours'] if schedule[maxime][day] and schedule[maxime][day].get('hours', 0) > 0 else 0
+        start_min = to_minutes(eh, em) - int(7.0 * 60)
+        svh, svm = from_minutes(start_min)
+        schedule[maxime][day] = make_shift('soir', svh, svm, eh, em)
+        weekly_hours[maxime] += schedule[maxime][day]['hours'] - old_m
+
+    return schedule, weekly_hours
+
+
+def _override_week3(schedule, weekly_hours):
+    """Semaine 3 : Inversion dimanche Joseph / Baptiste.
+    - Joseph → journée complète dimanche. Compense : -2h sam, -1h lun, -30min mar.
+    - Baptiste → partiel dimanche 14h15-19h15. Compense : +1h lun/jeu/ven, +30min sam.
+    """
+    joseph, baptiste = "Joseph Watrinet", "Baptiste Le Moing"
+    sh, sm, eh, em = HORAIRES[6]
+
+    # Retirer les shifts dimanche existants
+    for name in [baptiste, joseph]:
+        old = schedule[name][6]
+        old_h = old['hours'] if old and old.get('hours', 0) > 0 else 0
+        weekly_hours[name] -= old_h
+
+    # Joseph → journée complète dimanche
+    dim_h = min(hours_between(sh, sm, eh, em), 10.0)
+    schedule[joseph][6] = make_shift('journee', sh, sm, eh, em)
+    schedule[joseph][6]['hours'] = round(dim_h * 4) / 4
+    weekly_hours[joseph] += schedule[joseph][6]['hours']
+
+    # Baptiste → partiel dimanche 14h15-19h15
+    schedule[baptiste][6] = make_shift('soir', 14, 15, 19, 15)
+    weekly_hours[baptiste] += schedule[baptiste][6]['hours']
+
+    # Baptiste : rajouter des heures
+    for day, h in [(0, 1.0), (3, 1.0), (4, 1.0), (5, 0.5)]:
+        entry = schedule[baptiste][day]
+        if entry and entry['hours'] > 0:
+            _extend_shift(entry, h)
+            weekly_hours[baptiste] += h
+
+    # Joseph : réduire des heures
+    # -2h samedi (commence plus tard)
+    entry = schedule[joseph][5]
+    if entry and entry['hours'] > 0:
+        _reduce_shift(entry, 2.0)
+        weekly_hours[joseph] -= 2.0
+    # -1h lundi (finit plus tôt)
+    entry = schedule[joseph][0]
+    if entry and entry['hours'] > 0:
+        parts = entry['end'].split(':')
+        old_end = int(parts[0]) * 60 + int(parts[1])
+        ne_h, ne_m = from_minutes(old_end - 60)
+        entry['end'] = time_str(ne_h, ne_m)
+        entry['hours'] -= 1.0
+        weekly_hours[joseph] -= 1.0
+    # -30min mardi (finit plus tôt)
+    entry = schedule[joseph][1]
+    if entry and entry['hours'] > 0:
+        parts = entry['end'].split(':')
+        old_end = int(parts[0]) * 60 + int(parts[1])
+        ne_h, ne_m = from_minutes(old_end - 30)
+        entry['end'] = time_str(ne_h, ne_m)
+        entry['hours'] -= 0.5
+        weekly_hours[joseph] -= 0.5
+
+    return schedule, weekly_hours
+
+
+def apply_manual_overrides(schedule, weekly_hours, overrides):
+    """Applique les modifications manuelles de shifts."""
+    for ov in overrides:
+        name = ov['employee']
+        day = ov['day']
+        if name not in schedule:
             continue
-
-        if entry['type'] == 'soir':
-            parts = entry['start'].split(':')
-            old_start = int(parts[0]) * 60 + int(parts[1])
-            new_start = old_start + int(hours_to_remove * 60)
-            ns_h, ns_m = from_minutes(new_start)
-            entry['start'] = time_str(ns_h, ns_m)
-        elif entry['type'] == 'matin':
-            parts = entry['end'].split(':')
-            old_end = int(parts[0]) * 60 + int(parts[1])
-            new_end = old_end - int(hours_to_remove * 60)
-            ne_h, ne_m = from_minutes(new_end)
-            entry['end'] = time_str(ne_h, ne_m)
-
-        weekly_hours[name] -= hours_to_remove
-        entry['hours'] -= hours_to_remove
-
+        old = schedule[name][day]
+        old_h = old['hours'] if old and old.get('hours', 0) > 0 else 0
+        if ov['type'] == 'conge':
+            schedule[name][day] = {'type': 'conge', 'start': '', 'end': '', 'hours': 0}
+            weekly_hours[name] -= old_h
+        else:
+            s_parts = ov['start'].split(':')
+            e_parts = ov['end'].split(':')
+            s_h, s_m = int(s_parts[0]), int(s_parts[1])
+            e_h, e_m = int(e_parts[0]), int(e_parts[1])
+            schedule[name][day] = make_shift(ov['type'], s_h, s_m, e_h, e_m)
+            weekly_hours[name] += schedule[name][day]['hours'] - old_h
     return schedule, weekly_hours
 
 
@@ -680,10 +809,27 @@ def main():
     with col3:
         vacation_options = ["Aucun"] + [emp.name for emp in STAFF]
         vacation_choice = st.selectbox(
-            "Employé en vacances",
+            "Employé en vacances (semaine entière)",
             vacation_options,
-            help="Sélectionner un employé absent cette semaine. Le planning sera ajusté.",
+            help="Sélectionner un employé absent toute la semaine.",
         )
+
+    # ── Absences par jour ──
+    custom_off_days = {}
+    with st.expander("Absences par jour (vacances partielles)"):
+        st.caption("Ajouter des jours d'absence pour un ou plusieurs employés")
+        for emp in STAFF:
+            if emp.name == vacation_choice:
+                continue
+            abs_days = st.multiselect(
+                f"{emp.name.split()[0]}",
+                JOURS,
+                default=[],
+                key=f"abs_{emp.name}",
+            )
+            if abs_days:
+                jour_map = {j: i for i, j in enumerate(JOURS)}
+                custom_off_days[emp.name] = {jour_map[j] for j in abs_days}
 
     # ── Extra ──
     extras = []
@@ -712,6 +858,12 @@ def main():
 
     if vacation_choice != "Aucun":
         st.warning(f"**{vacation_choice}** est en vacances cette semaine. Planning ajusté.")
+    if custom_off_days:
+        abs_text = " | ".join(
+            f"**{n.split()[0]}** : {', '.join(JOURS[d] for d in sorted(ds))}"
+            for n, ds in custom_off_days.items()
+        )
+        st.warning(f"Absences : {abs_text}")
 
     # Afficher les congés
     off = get_off_days(week_num, meeting_week)
@@ -724,7 +876,67 @@ def main():
 
     # Générer
     vacation = vacation_choice if vacation_choice != "Aucun" else None
-    schedule, weekly_hours = generate_week(week_num, extras=extras, meeting_week=meeting_week, vacation=vacation)
+    schedule, weekly_hours = generate_week(
+        week_num, extras=extras, meeting_week=meeting_week,
+        vacation=vacation, custom_off_days=custom_off_days or None,
+    )
+
+    # ── Modifications manuelles de shifts ──
+    manual_overrides = []
+    with st.expander("Modifier un shift manuellement"):
+        st.caption("Remplacer un shift généré automatiquement")
+        if 'n_overrides' not in st.session_state:
+            st.session_state.n_overrides = 1
+        for i in range(st.session_state.n_overrides):
+            st.markdown(f"**Modification {i + 1}**")
+            oc1, oc2, oc3, oc4, oc5 = st.columns([2, 1, 1, 1, 1])
+            with oc1:
+                ov_emp = st.selectbox("Employé", [e.name for e in all_staff], key=f"ov_emp_{i}")
+            with oc2:
+                ov_day = st.selectbox("Jour", JOURS, key=f"ov_day_{i}")
+            with oc3:
+                ov_type = st.selectbox("Type", ["matin", "soir", "journee", "conge"], key=f"ov_type_{i}")
+            with oc4:
+                ov_start = st.text_input("Début", value="9:45", key=f"ov_start_{i}",
+                                         disabled=(ov_type == "conge"))
+            with oc5:
+                ov_end = st.text_input("Fin", value="18:15", key=f"ov_end_{i}",
+                                       disabled=(ov_type == "conge"))
+
+            jour_map = {j: idx for idx, j in enumerate(JOURS)}
+            manual_overrides.append({
+                'employee': ov_emp,
+                'day': jour_map[ov_day],
+                'type': ov_type,
+                'start': ov_start,
+                'end': ov_end,
+            })
+        if st.button("+ Ajouter une modification"):
+            st.session_state.n_overrides += 1
+            st.rerun()
+
+    # Appliquer les modifications manuelles seulement si l'utilisateur a interagi
+    if manual_overrides and any(
+        st.session_state.get(f"ov_emp_{i}") is not None
+        for i in range(st.session_state.get('n_overrides', 0))
+    ):
+        # Vérifier qu'au moins un override a des valeurs non-par-défaut
+        has_real_override = False
+        for i, ov in enumerate(manual_overrides):
+            if ov['type'] == 'conge':
+                has_real_override = True
+                break
+            try:
+                s = ov['start'].split(':')
+                e = ov['end'].split(':')
+                if len(s) == 2 and len(e) == 2:
+                    int(s[0]); int(s[1]); int(e[0]); int(e[1])
+                    has_real_override = True
+            except (ValueError, IndexError):
+                pass
+        if has_real_override:
+            schedule, weekly_hours = apply_manual_overrides(schedule, weekly_hours, manual_overrides)
+
     warnings, staffing_issues = check_labor_law(schedule, weekly_hours, all_staff)
 
     # ── Grille planning ──
