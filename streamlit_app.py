@@ -5,7 +5,7 @@ import datetime
 import hashlib
 from dataclasses import dataclass
 
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.3.0"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -30,109 +30,102 @@ def check_auth():
         st.session_state["authenticated"] = True
         return True
 
-    st.markdown("""
+    st.markdown(f"""
     <style>
-    #MainMenu, header, footer { visibility: hidden; }
-    .stAppDeployButton { display: none; }
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Space+Grotesk:wght@300;400;600&display=swap');
 
-    .stApp {
-        background: linear-gradient(160deg, #0f2318 0%, #1e4d2b 45%, #0f2318 100%);
+    #MainMenu, header, footer {{ visibility: hidden; }}
+    .stAppDeployButton {{ display: none; }}
+
+    .stApp {{
+        background: #080808;
         min-height: 100vh;
-    }
-
-    .block-container {
+        font-family: 'Space Grotesk', sans-serif;
+    }}
+    .block-container {{
         max-width: 400px !important;
         padding: 10vh 2rem 2rem !important;
         margin: 0 auto !important;
-    }
-
-    .golf-header {
+    }}
+    .bl-header {{
         text-align: center;
-        margin-bottom: 36px;
-    }
-    .golf-icon {
-        font-size: 48px;
-        display: block;
-        margin-bottom: 12px;
-    }
-    .golf-brand {
-        font-family: Georgia, 'Times New Roman', serif;
-        font-size: 28px;
-        font-weight: bold;
-        color: #e8f0e8;
-        letter-spacing: 4px;
+        margin-bottom: 40px;
+    }}
+    .bl-logo {{
+        font-family: 'Montserrat', sans-serif;
+        font-size: 32px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: 6px;
         text-transform: uppercase;
-    }
-    .golf-sub {
-        font-family: Georgia, serif;
-        font-size: 12px;
-        color: #7aab8a;
-        letter-spacing: 2px;
-        font-style: italic;
-        margin-top: 4px;
-    }
-    .golf-divider {
+    }}
+    .bl-sub {{
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 11px;
+        color: rgba(255,255,255,0.4);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-top: 6px;
+    }}
+    .bl-divider {{
         border: none;
-        border-top: 1px solid rgba(122,171,138,0.4);
-        margin: 0 20% 32px;
-    }
-
-    .stTextInput label {
-        color: #a8c8a8 !important;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        margin: 0 25% 36px;
+    }}
+    .stTextInput label {{
+        color: rgba(255,255,255,0.45) !important;
+        font-family: 'Space Grotesk', sans-serif !important;
         font-size: 10px !important;
-        font-weight: 700 !important;
+        font-weight: 600 !important;
         letter-spacing: 2px !important;
         text-transform: uppercase !important;
-    }
-    .stTextInput input {
-        background: rgba(255,255,255,0.06) !important;
-        border: 1px solid rgba(122,171,138,0.35) !important;
-        border-radius: 2px !important;
-        color: #e8f0e8 !important;
+    }}
+    .stTextInput input {{
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
+        border-radius: 6px !important;
+        color: #ffffff !important;
+        font-family: 'Space Grotesk', sans-serif !important;
         font-size: 15px !important;
-    }
-    .stTextInput input:focus {
-        border-color: #7aab8a !important;
-        box-shadow: 0 0 0 2px rgba(122,171,138,0.2) !important;
-        background: rgba(255,255,255,0.1) !important;
-    }
-    .stTextInput input::placeholder { color: rgba(168,200,168,0.35) !important; }
-
-    .stButton > button {
-        background: transparent !important;
-        color: #a8c8a8 !important;
-        border: 1px solid rgba(122,171,138,0.5) !important;
-        border-radius: 2px !important;
+    }}
+    .stTextInput input:focus {{
+        border-color: rgba(255,255,255,0.5) !important;
+        box-shadow: none !important;
+        background: rgba(255,255,255,0.07) !important;
+    }}
+    .stTextInput input::placeholder {{ color: rgba(255,255,255,0.2) !important; }}
+    .stButton > button {{
+        background: #ffffff !important;
+        color: #080808 !important;
+        border: none !important;
+        border-radius: 6px !important;
         width: 100% !important;
-        padding: 12px !important;
+        padding: 14px !important;
+        font-family: 'Montserrat', sans-serif !important;
         font-size: 11px !important;
         letter-spacing: 3px !important;
         text-transform: uppercase !important;
         font-weight: 700 !important;
         margin-top: 12px !important;
-        transition: all 0.2s !important;
-    }
-    .stButton > button:hover {
-        background: rgba(122,171,138,0.15) !important;
-        border-color: #7aab8a !important;
-        color: #e8f0e8 !important;
-    }
-
-    .golf-version {
+        transition: background 0.2s !important;
+    }}
+    .stButton > button:hover {{
+        background: #e0e0e0 !important;
+    }}
+    .bl-version {{
         text-align: center;
         font-size: 10px;
-        color: rgba(122,171,138,0.4);
+        color: rgba(255,255,255,0.2);
         letter-spacing: 2px;
         margin-top: 32px;
-    }
+        font-family: 'Space Grotesk', sans-serif;
+    }}
     </style>
-
-    <div class="golf-header">
-        <span class="golf-icon">⛳</span>
-        <div class="golf-brand">Birdieland</div>
-        <div class="golf-sub">Staff Planning · Réaumur</div>
+    <div class="bl-header">
+        <div class="bl-logo">Birdieland</div>
+        <div class="bl-sub">Staff Planning &middot; Réaumur</div>
     </div>
-    <hr class="golf-divider">
+    <hr class="bl-divider">
     """, unsafe_allow_html=True)
 
     login = st.text_input("Identifiant")
@@ -148,7 +141,7 @@ def check_auth():
         else:
             st.error("Identifiant ou mot de passe incorrect")
 
-    st.markdown(f'<div class="golf-version">v{APP_VERSION}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="bl-version">v{APP_VERSION}</div>', unsafe_allow_html=True)
     return False
 
 # ── Données staff ──────────────────────────────────────────────────────────
@@ -872,148 +865,161 @@ def export_connecteam_csv(start_date, num_weeks, first_week_type, extras=None, v
 
 # ── Interface Streamlit ────────────────────────────────────────────────────
 
-def main():
-    if not check_auth():
-        return
-
-    st.markdown("""
+def _birdieland_css():
+    return """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Space+Grotesk:wght@300;400;600&display=swap');
+
     #MainMenu, footer { visibility: hidden; }
     .stAppDeployButton { display: none; }
 
-    /* ── Fond global ── */
     .stApp {
-        background: linear-gradient(160deg, #0f2318 0%, #1e4d2b 45%, #0f2318 100%);
+        background: #080808 !important;
         min-height: 100vh;
+        font-family: 'Space Grotesk', sans-serif !important;
     }
+    .block-container { padding-top: 2rem !important; }
 
-    /* ── Textes généraux ── */
-    .stApp, .stMarkdown, .stText, p, li, span, label {
-        color: #d8ead8 !important;
-    }
-    h1, h2, h3 {
-        font-family: Georgia, 'Times New Roman', serif !important;
-        color: #e8f0e8 !important;
+    /* Textes */
+    .stApp, .stMarkdown, p, li { color: rgba(255,255,255,0.85) !important; }
+    h1, h2, h3, h4 {
+        font-family: 'Montserrat', sans-serif !important;
+        color: #ffffff !important;
         letter-spacing: 2px !important;
+        text-transform: uppercase;
     }
-    h1 { font-size: 26px !important; letter-spacing: 3px !important; }
-    h2 { font-size: 18px !important; border-bottom: 1px solid rgba(122,171,138,0.3); padding-bottom: 6px; }
-    h3 { font-size: 15px !important; }
+    h1 { font-size: 22px !important; font-weight: 700 !important; letter-spacing: 5px !important; }
+    h2 { font-size: 13px !important; font-weight: 600 !important; letter-spacing: 3px !important;
+         border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; margin-top: 32px !important; }
+    h3 { font-size: 12px !important; font-weight: 600 !important; }
 
-    /* ── Captions ── */
-    .stCaptionContainer p, small, .stCaption { color: rgba(122,171,138,0.7) !important; }
+    /* Captions */
+    .stCaptionContainer p, .stCaption p { color: rgba(255,255,255,0.3) !important; font-size: 11px !important; }
 
-    /* ── Labels widgets ── */
+    /* Labels */
     .stSelectbox label, .stCheckbox label, .stNumberInput label,
     .stDateInput label, .stTextInput label, .stMultiSelect label {
-        color: #a8c8a8 !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        letter-spacing: 1.5px !important;
+        color: rgba(255,255,255,0.4) !important;
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-size: 10px !important;
+        font-weight: 600 !important;
+        letter-spacing: 2px !important;
         text-transform: uppercase !important;
     }
 
-    /* ── Inputs / selects ── */
+    /* Inputs */
     .stSelectbox > div > div,
     .stTextInput input,
     .stNumberInput input,
     .stDateInput input {
-        background: rgba(255,255,255,0.06) !important;
-        border: 1px solid rgba(122,171,138,0.3) !important;
-        border-radius: 2px !important;
-        color: #e8f0e8 !important;
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 6px !important;
+        color: #ffffff !important;
+        font-family: 'Space Grotesk', sans-serif !important;
     }
-    .stSelectbox svg { fill: #7aab8a !important; }
+    .stSelectbox svg { fill: rgba(255,255,255,0.4) !important; }
 
-    /* ── Multiselect ── */
+    /* Multiselect */
     .stMultiSelect > div > div {
-        background: rgba(255,255,255,0.06) !important;
-        border: 1px solid rgba(122,171,138,0.3) !important;
-        border-radius: 2px !important;
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 6px !important;
     }
     .stMultiSelect span[data-baseweb="tag"] {
-        background: rgba(122,171,138,0.25) !important;
-        color: #e8f0e8 !important;
+        background: rgba(255,255,255,0.12) !important;
+        color: #ffffff !important;
+        border-radius: 4px !important;
     }
 
-    /* ── Checkbox ── */
-    .stCheckbox input[type="checkbox"] { accent-color: #7aab8a; }
+    /* Checkbox */
+    .stCheckbox input[type="checkbox"] { accent-color: #ffffff; }
 
-    /* ── Boutons ── */
+    /* Boutons */
     .stButton > button {
         background: transparent !important;
-        color: #a8c8a8 !important;
-        border: 1px solid rgba(122,171,138,0.5) !important;
-        border-radius: 2px !important;
-        font-size: 11px !important;
+        color: rgba(255,255,255,0.7) !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        border-radius: 6px !important;
+        font-family: 'Montserrat', sans-serif !important;
+        font-size: 10px !important;
         letter-spacing: 2px !important;
         text-transform: uppercase !important;
-        font-weight: 700 !important;
+        font-weight: 600 !important;
         transition: all 0.2s !important;
     }
     .stButton > button:hover {
-        background: rgba(122,171,138,0.15) !important;
-        border-color: #7aab8a !important;
-        color: #e8f0e8 !important;
+        background: rgba(255,255,255,0.08) !important;
+        border-color: rgba(255,255,255,0.5) !important;
+        color: #ffffff !important;
     }
 
-    /* ── Download button ── */
+    /* Download button */
     .stDownloadButton > button {
-        background: rgba(122,171,138,0.2) !important;
-        color: #e8f0e8 !important;
-        border: 1px solid rgba(122,171,138,0.6) !important;
-        border-radius: 2px !important;
+        background: #ffffff !important;
+        color: #080808 !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-family: 'Montserrat', sans-serif !important;
+        font-size: 10px !important;
         letter-spacing: 2px !important;
         text-transform: uppercase !important;
-        font-size: 11px !important;
         font-weight: 700 !important;
     }
-    .stDownloadButton > button:hover {
-        background: rgba(122,171,138,0.35) !important;
-    }
+    .stDownloadButton > button:hover { background: #e0e0e0 !important; }
 
-    /* ── Expanders ── */
+    /* Expanders */
     .streamlit-expanderHeader {
-        background: rgba(255,255,255,0.04) !important;
-        border: 1px solid rgba(122,171,138,0.2) !important;
-        border-radius: 2px !important;
-        color: #a8c8a8 !important;
+        background: rgba(255,255,255,0.03) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 6px !important;
+        color: rgba(255,255,255,0.6) !important;
+        font-family: 'Space Grotesk', sans-serif !important;
         font-size: 12px !important;
         letter-spacing: 1px !important;
     }
     .streamlit-expanderContent {
-        background: rgba(0,0,0,0.15) !important;
-        border: 1px solid rgba(122,171,138,0.15) !important;
+        background: rgba(255,255,255,0.02) !important;
+        border: 1px solid rgba(255,255,255,0.06) !important;
         border-top: none !important;
+        border-radius: 0 0 6px 6px !important;
     }
 
-    /* ── Alertes ── */
-    .stAlert { border-radius: 2px !important; border-left-width: 3px !important; }
-    [data-baseweb="notification"] { background: rgba(0,0,0,0.3) !important; }
-
-    /* ── Info box ── */
-    .stInfo { background: rgba(122,171,138,0.1) !important; border-left-color: #7aab8a !important; }
-    .stWarning { background: rgba(230,180,50,0.1) !important; }
-    .stSuccess { background: rgba(46,204,113,0.1) !important; }
+    /* Alertes */
+    .stAlert { border-radius: 6px !important; }
+    .stInfo { background: rgba(255,255,255,0.05) !important; border-left-color: rgba(255,255,255,0.3) !important; }
+    .stWarning { background: rgba(255,200,50,0.08) !important; }
+    .stSuccess { background: rgba(46,204,113,0.08) !important; }
     .stError { background: rgba(231,76,60,0.1) !important; }
 
-    /* ── Dataframe ── */
-    .stDataFrame { border: 1px solid rgba(122,171,138,0.2) !important; border-radius: 2px !important; }
+    /* Dataframe */
+    .stDataFrame { border: 1px solid rgba(255,255,255,0.08) !important; border-radius: 6px !important; }
 
-    /* ── Divider ── */
-    hr { border-color: rgba(122,171,138,0.2) !important; }
-
-    /* ── Sidebar (si utilisée) ── */
-    .css-1d391kg { background: #0f2318 !important; }
+    /* Divider */
+    hr { border-color: rgba(255,255,255,0.08) !important; }
     </style>
-    """, unsafe_allow_html=True)
+    """
 
-    st.markdown(
-        '<h1 style="display:inline;">⛳ Birdieland</h1>'
-        '<span style="font-family:Georgia,serif; font-size:14px; color:#7aab8a; '
-        'letter-spacing:2px; margin-left:16px; font-style:italic;">Staff Planning · Réaumur</span>',
-        unsafe_allow_html=True,
-    )
+
+def main():
+    if not check_auth():
+        return
+
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'birdieland'
+
+    if st.session_state.theme == 'birdieland':
+        st.markdown(_birdieland_css(), unsafe_allow_html=True)
+        st.markdown(
+            '<h1>Birdieland</h1>'
+            '<span style="font-family:\'Space Grotesk\',sans-serif; font-size:11px; '
+            'color:rgba(255,255,255,0.35); letter-spacing:3px; text-transform:uppercase; '
+            'margin-left:4px;">Staff Planning · Réaumur</span>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.title("Planning Staff - Birdieland Réaumur")
+
     st.caption(f"v{APP_VERSION}")
 
     st.markdown(
@@ -1319,6 +1325,21 @@ def main():
         mime="text/csv",
         type="primary",
     )
+
+    # ── Footer ──
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown(
+        '<hr style="border-color:rgba(255,255,255,0.06); margin-bottom:16px;">',
+        unsafe_allow_html=True,
+    )
+    fc1, fc2, fc3 = st.columns([3, 1, 1])
+    with fc2:
+        st.caption(f"v{APP_VERSION}")
+    with fc3:
+        label = "☀ Mode clair" if st.session_state.theme == 'birdieland' else "◑ Mode Birdieland"
+        if st.button(label, key="theme_toggle"):
+            st.session_state.theme = 'white' if st.session_state.theme == 'birdieland' else 'birdieland'
+            st.rerun()
 
 
 JOURS_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
