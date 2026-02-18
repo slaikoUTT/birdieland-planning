@@ -5,7 +5,7 @@ import datetime
 import hashlib
 from dataclasses import dataclass
 
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.0.1"
 
 st.set_page_config(page_title="Planning Staff - Birdieland", layout="wide")
 
@@ -389,7 +389,7 @@ def _override_week1(schedule, weekly_hours):
 
     joseph = "Joseph Watrinet"
     old_h = schedule[joseph][5]['hours'] if schedule[joseph][5] and schedule[joseph][5].get('hours', 0) > 0 else 0
-    schedule[joseph][5] = make_shift('matin', 9, 15, 18, 15)
+    schedule[joseph][5] = make_shift('matin', 9, 15, 17, 15)
     weekly_hours[joseph] += schedule[joseph][5]['hours'] - old_h
 
     return schedule, weekly_hours
@@ -432,7 +432,7 @@ def _override_week2(schedule, weekly_hours):
 def _override_week3(schedule, weekly_hours):
     """Semaine 3 : Inversion dimanche Joseph / Baptiste.
     - Joseph → journée complète dimanche. Compense : -2h sam, -1h lun, -30min mar.
-    - Baptiste → partiel dimanche 14h15-19h15. Compense : +1h lun/jeu/ven, +30min sam.
+    - Baptiste → partiel dimanche 14h15-19h15 (congé lundi, pas de compensation).
     """
     joseph, baptiste = "Joseph Watrinet", "Baptiste Le Moing"
     sh, sm, eh, em = HORAIRES[6]
@@ -452,13 +452,6 @@ def _override_week3(schedule, weekly_hours):
     # Baptiste → partiel dimanche 14h15-19h15
     schedule[baptiste][6] = make_shift('soir', 14, 15, 19, 15)
     weekly_hours[baptiste] += schedule[baptiste][6]['hours']
-
-    # Baptiste : rajouter des heures
-    for day, h in [(0, 1.0), (3, 1.0), (4, 1.0), (5, 0.5)]:
-        entry = schedule[baptiste][day]
-        if entry and entry['hours'] > 0:
-            _extend_shift(entry, h)
-            weekly_hours[baptiste] += h
 
     # Joseph : réduire des heures
     # -2h samedi (commence plus tard)
